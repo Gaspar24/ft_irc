@@ -1,0 +1,71 @@
+#!/bin/bash
+COMMIT_MSG_FILE="$1"
+# Read the commit message from the file
+commit_msg=$(cat "$COMMIT_MSG_FILE")
+
+# Get the current branch name
+current_branch=$(git symbolic-ref --short HEAD)
+
+# Check if the branch exists on the remote
+if git show-ref --verify --quiet "refs/remotes/origin/$current_branch"; then
+	# Get the last commit message from the remote branch
+	last_commit_msg=$(git log origin/"$current_branch" -1 --pretty=%B)
+	#echo -e "\033[0;33m$last_commit_msg \n\033[m"
+
+	# Check if the commit message is the same as the last commit
+	if [[ "$commit_msg" =~ "$last_commit_msg" ]]; then
+		echo -e "\033[0;35mNo changes \n \033[m"
+		exit 1
+	fi
+else
+	echo -e "\033[0;32mBranch does not exist on remote. Proceeding with commit. \n\033[m"
+fi
+
+#echo -e "\033[0;34m----\n$commit_msg\n---------\n\033[m"
+LINES=()
+while IFS= read -r line; do
+	LINES+=("$line")
+done < "$COMMIT_MSG_FILE"
+
+# Read the second line from the commit-msg file
+second_line=${LINES[1]}
+# Regex pattern to match and capture the string after "* [A-Z]:"
+# regex_pattern="^\* (Fix|Update in files|Docs|Feat|Style|Test|Refactor): (.*)"
+regex_pattern="^\*\s*(.*?)\s*:"
+
+# Check if the second line matches the regex pattern
+if [[ $second_line =~ $regex_pattern ]]; then
+	# Extract the matched pattern
+	matched_pattern="${BASH_REMATCH[0]}"
+	# Extract the string after the pattern
+	string_after_prefix="${second_line#"$matched_pattern"}"
+		
+	#echo -e "Matched pattern: ${matched_pattern}\n"
+	#echo -e "Remaining string: ${string_after_prefix}\n"
+	#echo -e "second_line: $second_line \n"
+	#echo -e "string_after_prefix:$string_after_prefix"
+	# Check if the string after the prefix is empty
+	if [[ -z "$string_after_prefix" || "$string_after_prefix" =~ ^[[:space:]]*$ ]]; then
+		# Check if there is a third line with a message
+		if [ ${#LINES[@]} -gt 2 ]; then
+			third_line=${LINES[2]}
+			#echo -e "third_line: $third_line"
+			if [[ -z "$third_line" || "$third_line" =~ ^[[:space:]]*$ || "$third_line" =~ ^# ]]; then
+				echo -e "\033[0;35mNo message after '$matched_pattern'.\n \033[m"
+				exit 1
+			fi
+		else
+			echo -e "\033[0;35mNo message after '$matched_pattern'.\n \033[m"
+			exit 1
+		fi
+	fi
+	echo -e "\033[0;32mCommit message accepted.\n \033[m"
+	exit 0
+else
+	echo -e "\033[0;35m"
+	echo -e "---\n$second_line\n-----\n"
+	echo -e "The second line does not match the specified pattern. \n\n"
+	echo -e " (Fix|Update in files|Docs|Feat|Style|Test|Refactor)"
+	echo -e "\033[m"
+	exit 1
+fi
